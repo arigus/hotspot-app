@@ -28,6 +28,8 @@ type Props = BoxProps<Theme> & {
   minZoomLevel?: number
   interactive?: boolean
   showUserLocation?: boolean
+  scrollEnabled?: boolean
+  zoomEnabled?: boolean
 }
 const Map = ({
   onMapMoved,
