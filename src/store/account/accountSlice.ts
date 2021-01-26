@@ -6,7 +6,12 @@ import {
   AnyTransaction,
 } from '@helium/http'
 import { unionBy } from 'lodash'
-import { getHotspots, getAccount, txnFetchers } from '../../utils/appDataClient'
+import {
+  getHotspots,
+  getAccount,
+  txnFetchers,
+  getHotspotDetails,
+} from '../../utils/appDataClient'
 import { getWallet, postWallet } from '../../utils/walletClient'
 import { FilterType } from '../../features/wallet/root/walletTypes'
 
@@ -85,6 +90,7 @@ export const fetchNotifications = createAsyncThunk<Notification[]>(
   'account/fetchNotifications',
   async () => getWallet('notifications'),
 )
+
 export const markNotificationsViewed = createAsyncThunk<Notification[]>(
   'account/markNotificationsViewed',
   async () => {
@@ -100,6 +106,13 @@ export const fetchTxns = createAsyncThunk<
   const list = txnFetchers[filterType]
   return list.takeJSON(filterType === 'pending' ? 1000 : 30)
 })
+
+export const fetchHotspotDetails = createAsyncThunk<Hotspot, string>(
+  'account/fetchHotspotDetails',
+  async (address) => {
+    return getHotspotDetails(address)
+  },
+)
 
 // This slice contains data related to the user account
 const accountSlice = createSlice({
@@ -167,6 +180,15 @@ const accountSlice = createSlice({
     })
     builder.addCase(fetchNotifications.fulfilled, (state, { payload }) => {
       state.notifications = payload
+    })
+    builder.addCase(fetchHotspotDetails.fulfilled, (state, { payload }) => {
+      const { address } = payload
+      const foundIndex = state.hotspots.findIndex((h) => h.address === address)
+      if (foundIndex !== -1) {
+        state.hotspots[foundIndex] = payload
+      } else {
+        state.hotspots.push(payload)
+      }
     })
   },
 })

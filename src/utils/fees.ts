@@ -116,3 +116,5 @@ export const calculateBurnTxnFee = async (
 
   return new Balance(tokenBurnTxn.fee || 0, CurrencyType.dataCredit)
 }
+
+export const STAKING_LOCATION_FEE = Transaction.stakingFeeTxnAssertLocationV1

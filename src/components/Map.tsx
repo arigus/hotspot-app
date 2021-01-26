@@ -1,19 +1,17 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useCallback } from 'react'
 import MapboxGL, {
   OnPressEvent,
   RegionPayload,
 } from '@react-native-mapbox-gl/maps'
-import { useSelector } from 'react-redux'
 import { Feature, Point, Position } from 'geojson'
+import { BoxProps } from '@shopify/restyle'
 import Box from './Box'
 import CurrentLocationButton from './CurrentLocationButton'
-import { RootState } from '../store/rootReducer'
-import { useAppDispatch } from '../store/store'
-import { getLocation } from '../store/user/appSlice'
+import { Theme } from '../theme/theme'
 
 const styleURL = 'mapbox://styles/petermain/ckjtsfkfj0nay19o3f9jhft6v'
 
-type Props = {
+type Props = BoxProps<Theme> & {
   onMapMoved?: (coords?: Position) => void
   onDidFinishLoadingMap?: (latitude: number, longitude: number) => void
   onMapMoving?: (feature: Feature<Point, RegionPayload>) => void
@@ -29,6 +27,7 @@ type Props = {
   maxZoomLevel?: number
   minZoomLevel?: number
   interactive?: boolean
+  showUserLocation?: boolean
 }
 const Map = ({
   onMapMoved,
@@ -43,23 +42,17 @@ const Map = ({
   selectedHotspots,
   witnesses,
   offsetCenterRatio,
+  showUserLocation,
   maxZoomLevel = 16,
   minZoomLevel = 0,
   interactive = true,
+  ...props
 }: Props) => {
   const map = useRef<MapboxGL.MapView>(null)
   const camera = useRef<MapboxGL.Camera>(null)
   const [loaded, setLoaded] = useState(false)
-  const {
-    app: { currentLocation, isLoadingLocation },
-  } = useSelector((state: RootState) => state)
-  const dispatch = useAppDispatch()
-
-  useEffect(() => {
-    if (currentLocationEnabled && !currentLocation && !isLoadingLocation) {
-      dispatch(getLocation())
-    }
-  }, [dispatch, currentLocation, isLoadingLocation, currentLocationEnabled])
+  const [userCoords, setUserCoords] = useState({ latitude: 0, longitude: 0 })
+  const [centerOffset, setCenterOffset] = useState(0)
 
   const onRegionDidChange = async () => {
     if (onMapMoved) {
@@ -70,22 +63,31 @@ const Map = ({
 
   const centerUserLocation = () => {
     camera.current?.setCamera({
-      centerCoordinate: currentLocation
-        ? [currentLocation.longitude, currentLocation.latitude]
+      centerCoordinate: userCoords
+        ? [userCoords.longitude, userCoords.latitude]
         : [-98.35, 15],
-      zoomLevel: currentLocation ? 16 : 2,
+      zoomLevel: userCoords ? 16 : 2,
       animationDuration: 500,
       heading: 0,
     })
   }
+  const flyTo = useCallback(
+    (lat?: number, lng?: number) => {
+      if (!lat || !lng) return
+      camera.current?.flyTo([lng, lat - centerOffset], animationDuration)
+    },
+    [animationDuration, centerOffset],
+  )
+
+  useEffect(() => {
+    if (!showUserLocation || !userCoords.latitude || !userCoords.longitude)
+      return
+
+    flyTo(userCoords.latitude, userCoords.longitude)
+  }, [flyTo, showUserLocation, userCoords])
 
   const onDidFinishLoad = () => {
     setLoaded(true)
-  }
-
-  const flyTo = (lat?: number, lng?: number) => {
-    if (!lat || !lng) return
-    camera.current?.flyTo([lng, lat - centerOffset], animationDuration)
   }
 
   const onShapeSourcePress = (event: OnPressEvent) => {
@@ -93,13 +95,9 @@ const Map = ({
     flyTo(properties?.lat, properties?.lng)
   }
 
-  const [centerOffset, setCenterOffset] = useState(0)
   useEffect(() => {
-    if (loaded && currentLocation) {
-      onDidFinishLoadingMap?.(
-        currentLocation.latitude,
-        currentLocation.longitude,
-      )
+    if (loaded && userCoords) {
+      onDidFinishLoadingMap?.(userCoords.latitude, userCoords.longitude)
     }
     const calculateOffset = async () => {
       const bounds = await map?.current?.getVisibleBounds()
@@ -115,16 +113,18 @@ const Map = ({
       setTimeout(calculateOffset, animationDuration)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLocation, loaded, offsetCenterRatio])
+  }, [userCoords, loaded, offsetCenterRatio])
 
   const mapImages = {
     markerOwned: require('../assets/images/owned-hotspot-marker.png'),
     markerSelected: require('../assets/images/selected-hotspot-marker.png'),
     markerWitness: require('../assets/images/witness-marker.png'),
+    markerLocation: require('../assets/images/location.png'),
   }
 
   return (
-    <Box>
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <Box {...props}>
       <MapboxGL.MapView
         ref={map}
         onRegionDidChange={onRegionDidChange}
@@ -139,6 +139,23 @@ const Map = ({
         zoomEnabled={interactive}
         compassEnabled={false}
       >
+        {(showUserLocation || currentLocationEnabled) && (
+          <MapboxGL.UserLocation
+            onUpdate={(loc) => {
+              if (userCoords.latitude && userCoords.longitude) return
+
+              setUserCoords(loc.coords)
+            }}
+          >
+            <MapboxGL.SymbolLayer
+              id="markerLocation"
+              style={{
+                iconImage: 'markerLocation',
+                iconPadding: 20,
+              }}
+            />
+          </MapboxGL.UserLocation>
+        )}
         <MapboxGL.Camera
           ref={camera}
           zoomLevel={zoomLevel}
