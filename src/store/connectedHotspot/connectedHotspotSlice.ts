@@ -29,8 +29,8 @@ export type HotspotDetails = {
     minVersion: string
   }
   ethernetOnline?: boolean
-  nonce?: number
   status?: HotspotStatus
+  details?: Hotspot
 }
 
 export type OnboardingRecord = {
@@ -145,10 +145,10 @@ const connectedHotspotSlice = createSlice({
       },
     )
     builder.addCase(fetchHotspotDetails.fulfilled, (state, { payload }) => {
-      state.nonce = payload.nonce
+      state.details = payload
     })
     builder.addCase(fetchHotspotDetails.rejected, (state) => {
-      state.nonce = 0
+      state.details = undefined
     })
   },
 })
