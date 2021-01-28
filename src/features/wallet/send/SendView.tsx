@@ -27,10 +27,13 @@ import { networkTokensToDataCredits } from '../../../utils/currency'
 import { makeBurnTxn, makePaymentTxn } from '../../../utils/transactions'
 import { submitTransaction } from '../../../utils/appDataClient'
 import * as Logger from '../../../utils/logger'
+import accountSlice from '../../../store/account/accountSlice'
+import { useAppDispatch } from '../../../store/store'
 
 const SendView = ({ scanResult }: { scanResult?: QrScanResult }) => {
   const navigation = useNavigation()
   const { t } = useTranslation()
+  const dispatch = useAppDispatch()
 
   const [type, setType] = useState<SendType>('payment')
   const [address, setAddress] = useState<string>('')
@@ -41,6 +44,9 @@ const SendView = ({ scanResult }: { scanResult?: QrScanResult }) => {
   const [isValid, setIsValid] = useState(false)
   const [fee, setFee] = useState<Balance<NetworkTokens>>(
     new Balance(0, CurrencyType.networkToken),
+  )
+  const [feeDC, setFeeDC] = useState<Balance<DataCredits>>(
+    new Balance(0, CurrencyType.dataCredit),
   )
   const {
     account: { account },
@@ -94,6 +100,7 @@ const SendView = ({ scanResult }: { scanResult?: QrScanResult }) => {
   // compute fee
   useAsync(async () => {
     const dcFee = await calculateFee()
+    setFeeDC(dcFee)
     const hntFee = await convertFeeToNetworkTokens(dcFee)
     setFee(hntFee)
   }, [amount])
@@ -157,7 +164,16 @@ const SendView = ({ scanResult }: { scanResult?: QrScanResult }) => {
   const handleSubmit = async () => {
     try {
       const txn = await constructTxn()
-      await submitTransaction(txn)
+      const pendingTransaction = await submitTransaction(txn)
+      pendingTransaction.txn = { fee: feeDC.integerBalance }
+      pendingTransaction.status = 'pending'
+      if (type === 'payment') {
+        pendingTransaction.type = 'payment_v2'
+      }
+      if (type === 'dc_burn') {
+        pendingTransaction.type = 'token_burn_v1'
+      }
+      dispatch(accountSlice.actions.addPendingTransaction(pendingTransaction))
       triggerNavHaptic()
       navigation.navigate('SendComplete')
     } catch (error) {
